@@ -1,0 +1,26 @@
+# 一场"训练营"的配置。
+#
+#   python -m wolf run --match configs/match.toml
+#
+# players 的长度必须等于板子座位数。rotate=true 时每局把座位分配向后轮转一位，
+# 让每个模型都有机会坐到每个位置、拿到每种身份，减少座位偏差。
+
+[match]
+board = "board_9"        # board_9 | board_12 | 也可以指向一个自定义板子的 toml 路径
+games = 4
+rotate = true
+seed = 20260815          # 固定随机种子，身份分配可复现
+archive = "archive"
+tag = "demo"
+
+parallel_games = 2       # 同时跑几局
+parallel_agents = 4      # 局内并发（投票等"同时行动"的环节）
+
+players = [
+  "heuristic", "heuristic", "heuristic",
+  "heuristic", "heuristic", "heuristic",
+  "heuristic", "heuristic", "heuristic",
+]
+
+# 真正做模型对比时，把 players 换成实际的模型 key，例如：
+# players = ["opus","opus","opus","qwen-local","qwen-local","qwen-local","heuristic","heuristic","heuristic"]

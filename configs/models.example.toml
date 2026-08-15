@@ -1,0 +1,49 @@
+# 模型池。复制成 configs/models.toml 后按需修改。
+# 每个 [models.<key>] 就是一个"选手"，key 会出现在 match.toml 的 players 里。
+
+# ---------- Anthropic（官方 SDK，读取 ANTHROPIC_API_KEY 或 `ant auth login` 的 profile）----------
+[models.opus]
+provider = "anthropic"
+model = "claude-opus-5"
+effort = "high"        # low | medium | high | xhigh | max
+thinking = true        # 自适应思考；关闭时 effort 上限为 high
+max_tokens = 16000
+
+[models.sonnet]
+provider = "anthropic"
+model = "claude-sonnet-5"
+effort = "medium"
+
+[models.haiku]
+provider = "anthropic"
+model = "claude-haiku-4-5"
+effort = "low"
+thinking = false
+
+# ---------- 本地推理：Ollama ----------
+# 先 `ollama serve`，再 `ollama pull qwen3:32b`
+[models.qwen-local]
+provider = "openai"
+model = "qwen3:32b"
+base_url = "http://localhost:11434/v1"
+structured = "json_object"   # Ollama 的 OpenAI 兼容层不支持 json_schema
+max_tokens = 4096
+temperature = 0.8
+
+# ---------- 本地推理：vLLM / LM Studio ----------
+[models.vllm-local]
+provider = "openai"
+model = "Qwen/Qwen3-32B"
+base_url = "http://localhost:8000/v1"
+structured = "json_schema"   # vLLM 支持 guided decoding
+api_key_env = "VLLM_API_KEY"
+
+# ---------- 任意 OpenAI 兼容云服务 ----------
+[models.deepseek]
+provider = "openai"
+model = "deepseek-chat"
+base_url = "https://api.deepseek.com/v1"
+api_key_env = "DEEPSEEK_API_KEY"
+structured = "json_object"
+
+# `heuristic` 是保留 key，不需要配置：内置的规则基线玩家，不调用任何 API。

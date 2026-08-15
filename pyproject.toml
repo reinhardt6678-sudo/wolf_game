@@ -1,0 +1,25 @@
+[project]
+name = "wolf-game"
+version = "0.1.0"
+description = "本地狼人杀 LLM 训练营：多模型对局 + 心理活动存档 + 复盘评测"
+requires-python = ">=3.11"
+dependencies = [
+    "requests>=2.31",   # OpenAI 兼容端点（本地模型）
+]
+
+[project.optional-dependencies]
+anthropic = ["anthropic>=0.60"]
+dev = ["pytest>=8.0"]
+
+[project.scripts]
+wolf = "wolf.cli:main"
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+include = ["wolf*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

@@ -1,0 +1,11 @@
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+*.egg-info/
+.pytest_cache/
+
+# 对局档案（体积大且含大量模型输出，默认不入库）
+archive/
+configs/models.toml
+.env

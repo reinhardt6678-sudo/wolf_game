@@ -1,0 +1,23 @@
+# 12 人标准局（预女猎守）。用法：match.toml 里 board = "configs/board_12.toml"
+name = "12人标准局(预女猎守)"
+seats = 12
+
+[roles]
+狼人 = 4
+预言家 = 1
+女巫 = 1
+猎人 = 1
+守卫 = 1
+平民 = 4
+
+[rules]
+victory = "屠边"
+witch_self_save_day = 1        # 女巫仅首夜可自救；0 = 永不可自救
+witch_sees_kill = "always"     # always | first_night
+witch_same_night_both = false  # 同一晚不可既救又毒
+guard_repeat = false           # 不可连守
+guard_save_conflict_dies = true # 同守同救 = 奶死
+first_night_last_words = true
+night_death_last_words = false
+tie_rule = "revote"            # revote | none
+max_days = 8
