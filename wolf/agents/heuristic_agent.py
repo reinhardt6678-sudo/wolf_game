@@ -12,7 +12,7 @@ from __future__ import annotations
 import random
 from typing import Any
 
-from ..roles import Board, Role
+from ..roles import Board, Camp, Role, camp_of
 from .base import ActionRequest, Decision
 
 
@@ -27,6 +27,10 @@ class HeuristicAgent:
         self.teammates: list[int] = []
         self.suspicion: dict[int, float] = {}
         self.notes = ""
+
+    @property
+    def is_wolf(self) -> bool:
+        return camp_of(self.role) is Camp.WOLF
 
     def on_game_start(
         self, *, seat: int, role: Role, board: Board, teammates: list[int], all_seats: list[int]
@@ -65,21 +69,47 @@ class HeuristicAgent:
                 "kill_check_target": 0,
                 "reason": "基线策略不做悍跳，保持低调等待好人自爆矛盾。",
             }
-        elif req.kind in ("seer_check", "guard_protect"):
-            if req.kind == "guard_protect":
+        elif req.kind in (
+            "seer_check",
+            "guard_protect",
+            "psychic_check",
+            "mechanic_guard",
+            "mechanic_psychic",
+            "mechanic_learn",
+            "mechanic_double_kill",
+        ):
+            if req.kind in ("guard_protect", "mechanic_guard"):
                 target = self.seat if self.seat in opts else (opts[0] if opts else 0)
                 thinking = f"基线策略：守护 {target} 号（优先自守，保证信息源存活）。"
+            elif req.kind == "mechanic_learn":
+                target = opts[0] if opts else 0
+                thinking = f"基线策略：学习 {target} 号，赌他是个有技能的神。"
             else:
                 target = self._most_suspicious(opts)
-                thinking = f"基线策略：查验怀疑度最高的 {target} 号。"
+                thinking = f"基线策略：查验/针对怀疑度最高的 {target} 号。"
             data = {"target": target}
+        elif req.kind == "dance_invite":
+            pool = sorted(opts)[:3]
+            data = {"targets": pool}
+            thinking = "基线策略：按座位序点满舞池，先把信息面铺开。"
+        elif req.kind == "mask_action":
+            probe = self._most_suspicious(opts) if opts else 0
+            target = self.seat if self.seat in opts else (opts[0] if opts else 0)
+            data = {"probe_target": probe, "target": target}
+            thinking = f"基线策略：打听 {probe} 号在不在舞池，把面具戴在 {target} 号身上翻转结算。"
+            scheme = {
+                "stance": "深水(装平民)",
+                "gold_water_target": 0,
+                "kill_check_target": 0,
+                "reason": "假面不与狼见面，白天保持低调，靠面具搅乱舞池结算。",
+            }
         elif req.kind == "witch_action":
             use = req.day == 1 and "被刀" in req.extra
             data = {"use_antidote": bool(use), "poison_target": 0}
             thinking = "基线策略：首夜救人保神，毒药留到后期有明确目标时再用。"
         elif req.kind == "speech":
             target = self._most_suspicious(opts or req.alive)
-            claim = "隐藏" if self.role is Role.WEREWOLF else self.role.value
+            claim = "隐藏" if self.is_wolf else self.role.value
             data = {
                 "claim": claim,
                 "speech": f"我目前最怀疑 {target} 号，他的发言里没有给出明确的站边。我先把票压在 {target} 号。",
@@ -87,9 +117,9 @@ class HeuristicAgent:
             }
             thinking = (
                 f"基线策略：公开对外宣称 {claim}，把矛头指向 {target} 号。"
-                + ("（作为狼人，这是在把水搅浑。）" if self.role is Role.WEREWOLF else "")
+                + ("（作为狼人，这是在把水搅浑。）" if self.is_wolf else "")
             )
-            if self.role is Role.WEREWOLF:
+            if self.is_wolf:
                 scheme = {
                     "stance": "深水(装平民)",
                     "gold_water_target": 0,
@@ -101,12 +131,13 @@ class HeuristicAgent:
             data = {"target": target, "one_liner": f"投 {target} 号。"}
             thinking = f"基线策略：投怀疑度最高的 {target} 号。"
         elif req.kind == "last_words":
-            data = {"claim": self.role.value if self.role is not Role.WEREWOLF else "隐藏", "speech": "我出局了，好人跟紧我的票。"}
+            data = {"claim": "隐藏" if self.is_wolf else self.role.value, "speech": "我出局了，好人跟紧我的票。"}
             thinking = "基线策略：留下一句无信息量的遗言。"
-        elif req.kind == "hunter_shot":
+        elif req.kind in ("hunter_shot", "wolf_king_shot"):
             target = self._most_suspicious(opts)
-            data = {"target": target, "speech": f"我是猎人，带走 {target} 号。"}
-            thinking = f"基线策略：开枪带走怀疑度最高的 {target} 号。"
+            label = "猎人" if req.kind == "hunter_shot" else "狼王"
+            data = {"target": target, "speech": f"我是{label}，带走 {target} 号。"}
+            thinking = f"基线策略：开枪带走{'怀疑度最高' if req.kind == 'hunter_shot' else '对狼队威胁最大'}的 {target} 号。"
 
         beliefs = [
             {

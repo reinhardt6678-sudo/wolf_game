@@ -1,0 +1,28 @@
+# 12 人狼王守卫局。用法：match.toml 里 board = "board_wolfking" 或 "configs/board_wolfking.toml"
+#
+# 一狼变狼王：好人推对了人也可能被反带一枪，所以「推谁」的成本变高了，
+# 守卫的价值也随之上升（狼王在场，好人更需要保住神职）。
+name = "12人狼王守卫局(预女猎守 VS 狼王)"
+seats = 12
+
+[roles]
+"狼人" = 3
+"狼王" = 1
+"预言家" = 1
+"女巫" = 1
+"猎人" = 1
+"守卫" = 1
+"平民" = 4
+
+[rules]
+victory = "屠边"
+witch_self_save_day = 1
+witch_sees_kill = "always"
+witch_same_night_both = false
+guard_repeat = false
+guard_save_conflict_dies = true
+wolf_king_shoot_on_poison = false   # 狼王被女巫毒死不能开枪（改成 true 则可以）
+first_night_last_words = true
+night_death_last_words = false
+tie_rule = "revote"
+max_days = 8

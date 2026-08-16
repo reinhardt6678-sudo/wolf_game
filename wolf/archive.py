@@ -28,10 +28,18 @@ KIND_LABEL = {
     "seer_check": "预言家查验",
     "guard_protect": "守卫守护",
     "witch_action": "女巫用药",
+    "dance_invite": "舞者点舞池",
+    "mask_action": "假面戴面具",
+    "psychic_check": "通灵师查验",
+    "mechanic_learn": "机械狼学习",
+    "mechanic_guard": "机械狼守护",
+    "mechanic_psychic": "机械狼查验",
+    "mechanic_double_kill": "机械狼双刀",
     "speech": "白天发言",
     "vote": "投票",
     "last_words": "遗言",
     "hunter_shot": "猎人开枪",
+    "wolf_king_shot": "狼王开枪",
 }
 
 
@@ -126,7 +134,7 @@ class Archive:
                 out += ["", f"### {label}", ""]
             tag = {"public": "", "wolf": "🐺 ", "private": "🔒 "}.get(ev.visibility.value, "")
             speaker = f"**{ev.actor}号**：" if ev.actor is not None and ev.type in (
-                "speech", "last_words", "hunter_shot", "wolf_talk"
+                "speech", "last_words", "hunter_shot", "wolf_king_shot", "wolf_talk"
             ) else ""
             out.append(f"- {tag}{speaker}{ev.text}")
             for rec in minds_by_idx.get(ev.idx, []):

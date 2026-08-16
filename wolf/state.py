@@ -5,7 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 
 from .events import EventLog
-from .roles import Board, Camp, Role, camp_of, is_god, is_villager
+from .roles import Board, Camp, Role, camp_of, is_god, is_pack_wolf, is_villager
 
 
 @dataclass
@@ -48,6 +48,33 @@ class GameState:
     last_guard_target: int | None = None
     speech_start_seat: int = 1
 
+    #: 白痴剩余的免疫放逐次数（座位 → 次数）
+    idiot_immunity: dict[int, int] = field(default_factory=dict)
+    #: 已经当众翻牌的身份（白痴翻牌后全场可见）
+    revealed_roles: dict[int, Role] = field(default_factory=dict)
+    #: 失去投票权的座位（白痴翻牌后）
+    no_vote_seats: set[int] = field(default_factory=set)
+
+    # ---- 假面舞会 ----
+    #: 整局已经进过舞池的座位（每人只能进一次）
+    danced_seats: set[int] = field(default_factory=set)
+    #: 今晚的舞池
+    dance_pool: list[int] = field(default_factory=list)
+    #: 昨晚戴面具的座位（假面不能连续两晚给同一人）
+    last_mask_target: int | None = None
+
+    # ---- 机械狼 ----
+    #: 机械狼学到的身份（None = 还没学）
+    mechanic_learned: Role | None = None
+    #: 学到的技能从第几夜起生效
+    mechanic_skill_from: int | None = None
+    #: 机械狼的双刀是否还没用过
+    mechanic_double_kill_left: bool = True
+    #: 机械狼学到守卫后昨晚守的人
+    last_mechanic_guard: int | None = None
+    #: 机械狼（学狼人）连续刀同一人的记录
+    mechanic_last_kill: int | None = None
+
     winner: Camp | None = None
     end_reason: str = ""
 
@@ -60,6 +87,32 @@ class GameState:
 
     def alive_players(self) -> list[Player]:
         return [self.players[s] for s in self.alive_seats()]
+
+    def dead_seats(self) -> list[int]:
+        return [s for s in self.seats() if not self.players[s].alive]
+
+    def voter_seats(self) -> list[int]:
+        """有投票权的存活玩家（白痴翻牌后会被移出）。"""
+        return [s for s in self.alive_seats() if s not in self.no_vote_seats]
+
+    def pack_wolf_seats(self, alive_only: bool = True) -> list[int]:
+        """会面的狼（进狼队频道、参与刀人的那一批，不含机械狼/假面）。"""
+        return [
+            s
+            for s in self.seats()
+            if is_pack_wolf(self.players[s].role)
+            and (not alive_only or self.players[s].alive)
+        ]
+
+    def lone_wolf_seats(self, alive_only: bool = True) -> list[int]:
+        """不见面的功能狼（机械狼、假面）。"""
+        return [
+            s
+            for s in self.seats()
+            if self.players[s].camp is Camp.WOLF
+            and not is_pack_wolf(self.players[s].role)
+            and (not alive_only or self.players[s].alive)
+        ]
 
     def wolf_seats(self, alive_only: bool = False) -> list[int]:
         return [
