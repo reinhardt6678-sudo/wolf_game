@@ -30,9 +30,10 @@ class LeakyAgent(HeuristicAgent):
         return d
 
 
-@pytest.fixture
-def leaky_game(engine_factory):
-    engine = engine_factory(seed=17, agent_cls=LeakyAgent)
+@pytest.fixture(params=["board_9", "board_12", "board_mechanic", "board_dancer", "board_mixed"])
+def leaky_game(engine_factory, request):
+    """每副板子都跑一遍：新角色的私密事件同样不能泄漏。"""
+    engine = engine_factory(board_key=request.param, seed=17, agent_cls=LeakyAgent)
     engine.run()
     return engine
 
@@ -59,19 +60,41 @@ def test_thinking_is_present_in_the_archive(leaky_game):
 
 
 def test_wolf_channel_is_visible_only_to_wolves(leaky_game):
+    """狼队频道（狼聊、刀口、机械狼的扫描结果）只能被狼看到。
+
+    注意反向不成立：已经出局的狼不在当晚的听众里，这是对的。
+    """
     st = leaky_game.state
     wolves = set(st.wolf_seats())
+    wolf_events = 0
     for ev in leaky_game.archive.event_list:
-        if ev.visibility is Visibility.WOLF:
-            assert set(ev.audience) <= wolves, "狼队频道被好人看到了"
-            for seat in st.seats():
-                assert ev.visible_to(seat) == (seat in wolves)
+        if ev.visibility is not Visibility.WOLF:
+            continue
+        wolf_events += 1
+        assert set(ev.audience) <= wolves, "狼队频道被好人看到了"
+        for seat in st.seats():
+            if ev.visible_to(seat):
+                assert seat in wolves, f"{seat}号不是狼，却能看到狼队频道"
+    assert wolf_events, "这一局没有产生任何狼队频道事件"
+
+
+PRIVATE_TYPES = (
+    "seer_check",
+    "witch_action",
+    "guard_protect",
+    "role_assign",
+    "psychic_check",
+    "psychic_idle",
+    "dancer_dance",
+    "skill_blocked",
+)
 
 
 def test_seer_results_are_private(leaky_game):
+    """所有单人可见的技能结果（含通灵、共舞、被封通知）只有本人看得到。"""
     st = leaky_game.state
     for ev in leaky_game.archive.event_list:
-        if ev.type in ("seer_check", "witch_action", "guard_protect", "role_assign"):
+        if ev.type in PRIVATE_TYPES:
             assert ev.visibility is Visibility.PRIVATE
             assert set(ev.audience) == {ev.actor}
             for seat in st.seats():

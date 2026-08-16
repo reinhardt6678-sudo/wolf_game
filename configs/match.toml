@@ -6,7 +6,10 @@
 # 让每个模型都有机会坐到每个位置、拿到每种身份，减少座位偏差。
 
 [match]
-board = "board_9"        # board_9 | board_12 | 也可以指向一个自定义板子的 toml 路径
+# board_9 | board_12 | board_wolfking | board_mechanic | board_dancer | board_mixed
+# 也可以指向一个自定义板子的 toml 路径，例如 "configs/board_dancer.toml"
+# （`python -m wolf boards` 可以列出全部内置板子）
+board = "board_9"
 games = 4
 rotate = true
 seed = 20260815          # 固定随机种子，身份分配可复现

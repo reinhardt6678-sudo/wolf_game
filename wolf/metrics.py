@@ -17,8 +17,10 @@ from typing import Any
 
 from .archive import iter_games
 
+#: 「狼人」既是身份名也是阵营名，按阵营判定；狼王/机械狼按具体身份判定。
 WOLF_GUESSES = {"狼人"}
-GOOD_GUESSES = {"好人", "平民", "预言家", "女巫", "猎人", "守卫"}
+WOLF_ROLE_GUESSES = {"狼王", "机械狼"}
+GOOD_GUESSES = {"好人", "平民", "预言家", "女巫", "猎人", "守卫", "通灵师", "舞者", "假面"}
 
 
 @dataclass
@@ -95,6 +97,8 @@ def _belief_is_correct(guess: str, true_role: str, true_camp: str) -> bool | Non
         return None
     if guess in WOLF_GUESSES:
         return true_camp == "狼人"
+    if guess in WOLF_ROLE_GUESSES:
+        return guess == true_role
     if guess == "好人":
         return true_camp == "好人"
     if guess in GOOD_GUESSES:

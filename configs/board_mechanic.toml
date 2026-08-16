@@ -1,0 +1,30 @@
+# 12 人机械狼通灵师局（信息战板子）。
+#
+# 双方各有一台"扫描仪"：
+#   机械狼 —— 每晚查一个活人「是不是神职」，结果同步整个狼队（精准屠神）；
+#   通灵师 —— 每晚查一个死人的真实身份（后期把死人堆变成好人的证据链）。
+name = "12人机械狼通灵师局(信息战)"
+seats = 12
+
+[roles]
+"狼人" = 3
+"机械狼" = 1
+"预言家" = 1
+"女巫" = 1
+"守卫" = 1
+"通灵师" = 1
+"平民" = 4
+
+[rules]
+victory = "屠边"
+witch_self_save_day = 1
+witch_sees_kill = "always"
+witch_same_night_both = false
+guard_repeat = false
+guard_save_conflict_dies = true
+mechanic_wolf_shares = true    # 扫描结果同步给整个狼队；false = 只有机械狼自己知道
+psychic_reveals_role = true    # 通灵看到具体身份；false = 只看好人/狼人
+first_night_last_words = true
+night_death_last_words = false
+tie_rule = "revote"
+max_days = 8

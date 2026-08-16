@@ -46,7 +46,15 @@ class GameState:
     witch_antidote: bool = True
     witch_poison: bool = True
     last_guard_target: int | None = None
+    last_dance_target: int | None = None
     speech_start_seat: int = 1
+
+    #: 假面剩余的免疫放逐次数（座位 → 次数）
+    mask_immunity: dict[int, int] = field(default_factory=dict)
+    #: 已经当众翻牌的身份（假面揭面后全场可见）
+    revealed_roles: dict[int, Role] = field(default_factory=dict)
+    #: 失去投票权的座位（假面揭面后）
+    no_vote_seats: set[int] = field(default_factory=set)
 
     winner: Camp | None = None
     end_reason: str = ""
@@ -60,6 +68,13 @@ class GameState:
 
     def alive_players(self) -> list[Player]:
         return [self.players[s] for s in self.alive_seats()]
+
+    def dead_seats(self) -> list[int]:
+        return [s for s in self.seats() if not self.players[s].alive]
+
+    def voter_seats(self) -> list[int]:
+        """有投票权的存活玩家（假面揭面后会被移出）。"""
+        return [s for s in self.alive_seats() if s not in self.no_vote_seats]
 
     def wolf_seats(self, alive_only: bool = False) -> list[int]:
         return [

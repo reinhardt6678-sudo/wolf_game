@@ -1,0 +1,29 @@
+# 12 人舞者假面局（节奏控制板子）。
+#
+# 舞者每晚封一个人的技能（封到狼就少一把刀，封到神就废一个神），
+# 并且能感知到舞伴「今晚原本有没有夜间技能」——这是一台反向的查民机。
+# 假面则是好人的抗推位：被冤枉放逐一次不死，翻牌之后继续留在场上。
+name = "12人舞者假面局(封技能与抗推)"
+seats = 12
+
+[roles]
+"狼人" = 4
+"预言家" = 1
+"女巫" = 1
+"舞者" = 1
+"假面" = 1
+"平民" = 4
+
+[rules]
+victory = "屠边"
+witch_self_save_day = 1
+witch_sees_kill = "always"
+witch_same_night_both = false
+dancer_repeat = false          # 舞者不可连续两晚邀请同一人
+dancer_feedback = true         # 舞者能得知舞伴有无夜间技能；false = 盲封
+mask_exile_immunity = 1        # 假面可以免疫几次放逐
+mask_loses_vote = true         # 揭面后失去投票权
+first_night_last_words = true
+night_death_last_words = false
+tie_rule = "revote"
+max_days = 8

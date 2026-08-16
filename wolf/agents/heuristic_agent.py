@@ -12,7 +12,7 @@ from __future__ import annotations
 import random
 from typing import Any
 
-from ..roles import Board, Role
+from ..roles import Board, Camp, Role, camp_of
 from .base import ActionRequest, Decision
 
 
@@ -27,6 +27,10 @@ class HeuristicAgent:
         self.teammates: list[int] = []
         self.suspicion: dict[int, float] = {}
         self.notes = ""
+
+    @property
+    def is_wolf(self) -> bool:
+        return camp_of(self.role) is Camp.WOLF
 
     def on_game_start(
         self, *, seat: int, role: Role, board: Board, teammates: list[int], all_seats: list[int]
@@ -65,21 +69,37 @@ class HeuristicAgent:
                 "kill_check_target": 0,
                 "reason": "基线策略不做悍跳，保持低调等待好人自爆矛盾。",
             }
-        elif req.kind in ("seer_check", "guard_protect"):
+        elif req.kind in ("seer_check", "guard_protect", "dancer_dance", "psychic_check"):
             if req.kind == "guard_protect":
                 target = self.seat if self.seat in opts else (opts[0] if opts else 0)
                 thinking = f"基线策略：守护 {target} 号（优先自守，保证信息源存活）。"
+            elif req.kind == "psychic_check":
+                target = opts[-1] if opts else 0  # 通灵最近出局的一位
+                thinking = f"基线策略：通灵最近出局的 {target} 号，先补齐死人身份。"
+            elif req.kind == "dancer_dance":
+                target = self._most_suspicious(opts)
+                thinking = f"基线策略：邀请怀疑度最高的 {target} 号共舞，封住他今晚可能的技能。"
             else:
                 target = self._most_suspicious(opts)
                 thinking = f"基线策略：查验怀疑度最高的 {target} 号。"
             data = {"target": target}
+        elif req.kind == "mechanic_scan":
+            target = self._most_suspicious(opts)
+            data = {"target": target, "wolf_talk": f"我今晚扫 {target} 号，看看他是不是神。"}
+            thinking = f"基线策略：扫描 {target} 号，优先找出神职位置方便屠神。"
+            scheme = {
+                "stance": "深水(装平民)",
+                "gold_water_target": 0,
+                "kill_check_target": 0,
+                "reason": "机械狼靠扫描积累信息，白天不需要冒头。",
+            }
         elif req.kind == "witch_action":
             use = req.day == 1 and "被刀" in req.extra
             data = {"use_antidote": bool(use), "poison_target": 0}
             thinking = "基线策略：首夜救人保神，毒药留到后期有明确目标时再用。"
         elif req.kind == "speech":
             target = self._most_suspicious(opts or req.alive)
-            claim = "隐藏" if self.role is Role.WEREWOLF else self.role.value
+            claim = "隐藏" if self.is_wolf else self.role.value
             data = {
                 "claim": claim,
                 "speech": f"我目前最怀疑 {target} 号，他的发言里没有给出明确的站边。我先把票压在 {target} 号。",
@@ -87,9 +107,9 @@ class HeuristicAgent:
             }
             thinking = (
                 f"基线策略：公开对外宣称 {claim}，把矛头指向 {target} 号。"
-                + ("（作为狼人，这是在把水搅浑。）" if self.role is Role.WEREWOLF else "")
+                + ("（作为狼人，这是在把水搅浑。）" if self.is_wolf else "")
             )
-            if self.role is Role.WEREWOLF:
+            if self.is_wolf:
                 scheme = {
                     "stance": "深水(装平民)",
                     "gold_water_target": 0,
@@ -101,12 +121,13 @@ class HeuristicAgent:
             data = {"target": target, "one_liner": f"投 {target} 号。"}
             thinking = f"基线策略：投怀疑度最高的 {target} 号。"
         elif req.kind == "last_words":
-            data = {"claim": self.role.value if self.role is not Role.WEREWOLF else "隐藏", "speech": "我出局了，好人跟紧我的票。"}
+            data = {"claim": "隐藏" if self.is_wolf else self.role.value, "speech": "我出局了，好人跟紧我的票。"}
             thinking = "基线策略：留下一句无信息量的遗言。"
-        elif req.kind == "hunter_shot":
+        elif req.kind in ("hunter_shot", "wolf_king_shot"):
             target = self._most_suspicious(opts)
-            data = {"target": target, "speech": f"我是猎人，带走 {target} 号。"}
-            thinking = f"基线策略：开枪带走怀疑度最高的 {target} 号。"
+            label = "猎人" if req.kind == "hunter_shot" else "狼王"
+            data = {"target": target, "speech": f"我是{label}，带走 {target} 号。"}
+            thinking = f"基线策略：开枪带走{'怀疑度最高' if req.kind == 'hunter_shot' else '对狼队威胁最大'}的 {target} 号。"
 
         beliefs = [
             {

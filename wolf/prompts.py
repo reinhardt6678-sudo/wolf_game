@@ -6,8 +6,8 @@
 from __future__ import annotations
 
 from .events import Event
-from .roles import ROLE_BRIEF, Board, Role
-from .schemas import STANCES
+from .roles import ROLE_BRIEF, Board, Camp, Role, camp_of
+from .schemas import stances_for
 
 PRIVACY_BLOCK = """\
 # 关于 thinking 字段（最重要的一条）
@@ -44,33 +44,34 @@ def system_prompt(
     teammates: list[int] | None,
     all_seats: list[int],
 ) -> str:
+    is_wolf = camp_of(role) is Camp.WOLF
     lines = [
         f"你正在参加一场狼人杀对局。你是 {seat} 号玩家。",
         "",
         "# 你的身份",
-        f"身份：**{role.value}**（阵营：{'狼人' if role is Role.WEREWOLF else '好人'}）",
+        f"身份：**{role.value}**（阵营：{camp_of(role).value}）",
         ROLE_BRIEF[role],
     ]
     if teammates:
         mates = "、".join(f"{s}号" for s in teammates)
         lines.append(f"你的狼队友是：{mates}。夜晚你们可以在狼队频道里商议。")
-    elif role is Role.WEREWOLF:
+    elif is_wolf:
         lines.append("你是场上唯一的狼人（其余狼队友已出局）。")
     lines += [
         "",
         "# 板子与规则",
         board.describe(),
         f"座位：{'、'.join(str(s) + '号' for s in all_seats)}",
-        board.rules.describe(),
+        board.rules_text(),
         "",
         "# 你的目标",
     ]
-    if role is Role.WEREWOLF:
+    if is_wolf:
         lines.append(
             "让狼人阵营获胜。你需要在白天伪装成好人：控节奏、混水、制造对立、"
             "把好人的票引到好人身上。狼人可以自由撒谎。"
         )
-        lines.append(f"常见的狼人打法：{'、'.join(STANCES[:-1])}。")
+        lines.append(f"常见的狼人打法：{'、'.join(stances_for(board)[:-1])}。")
     else:
         lines.append(
             "让好人阵营获胜：通过发言与投票找出并放逐所有狼人。"
@@ -113,7 +114,7 @@ def render_events(events: list[Event], viewer: int) -> str:
         elif ev.visibility.value == "private":
             mark = "[仅你可见] "
         speaker = f"{ev.actor}号" if ev.actor is not None else ""
-        if ev.type in ("speech", "last_words", "vote_declare", "hunter_shot"):
+        if ev.type in ("speech", "last_words", "vote_declare", "hunter_shot", "wolf_king_shot"):
             out.append(f"{mark}{speaker}：{ev.text}")
         else:
             out.append(f"{mark}{ev.text}")
@@ -171,6 +172,19 @@ ACTION_ASK = {
     "seer_check": "现在是第 {day} 夜，请选择今晚要查验的玩家。",
     "guard_protect": "现在是第 {day} 夜，请选择今晚要守护的玩家（可以守自己）。",
     "witch_action": "现在是第 {day} 夜，女巫行动。请决定是否使用解药、是否使用毒药。",
+    "dancer_dance": (
+        "现在是第 {day} 夜，舞者行动。请选择今晚邀请谁共舞——他当晚的所有技能都会失效"
+        "（狼人无法参与刀人、神职技能作废），而且他自己会知道被封了。"
+        "共舞之后你会得知他今晚原本有没有夜间技能，据此可以反推他是不是平民。"
+    ),
+    "psychic_check": (
+        "现在是第 {day} 夜，通灵师行动。请选择今晚要通灵的【已出局】玩家，你会得知他的真实身份。"
+    ),
+    "mechanic_scan": (
+        "现在是第 {day} 夜，机械狼扫描。请选择今晚要扫描的玩家，你会得知他【是神职】还是【不是神职】，"
+        "结果会同步给整个狼队；请在 wolf_talk 里把你的想法说给队友听。"
+        "稍后你还会和狼队一起决定今晚刀谁。"
+    ),
     "speech": (
         "现在是第 {day} 天白天的发言阶段，轮到你发言。全场都会听到你的 speech。"
         "请给出你的身份宣称（可以撒谎）、公开发言内容、以及你目前的投票倾向。"
@@ -178,4 +192,8 @@ ACTION_ASK = {
     "vote": "现在是第 {day} 天的投票阶段。请投出你要放逐的玩家（弃票填 0）。",
     "last_words": "你已经出局了。请留下你的遗言（全场都会听到）。",
     "hunter_shot": "你是猎人并且已出局，可以开枪带走一名玩家（放弃开枪填 0）。",
+    "wolf_king_shot": (
+        "你是狼王并且已出局，可以开枪带走一名玩家（放弃开枪填 0）。"
+        "开枪同时会公开你的狼王身份，请把枪口留给对狼队威胁最大的人。"
+    ),
 }

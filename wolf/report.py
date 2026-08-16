@@ -130,7 +130,7 @@ def render_replay(game_dir: str | Path) -> Path:
         cls = {"wolf": "ev wolfchan", "private": "ev priv"}.get(ev["visibility"], "ev")
         who = ""
         if ev["actor"] is not None and ev["type"] in (
-            "speech", "last_words", "hunter_shot", "vote_declare", "wolf_talk"
+            "speech", "last_words", "hunter_shot", "wolf_king_shot", "vote_declare", "wolf_talk"
         ):
             p = by_seat.get(ev["actor"], {})
             camp_cls = "wolf" if p.get("camp") == "狼人" else "good"

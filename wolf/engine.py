@@ -11,8 +11,14 @@ from . import prompts
 from .agents.base import ActionRequest, Decision
 from .archive import Archive
 from .events import Visibility
-from .roles import Board, Camp, Role, camp_of, is_god, is_villager
+from .roles import NIGHT_SKILL_ROLES, Board, Camp, Role, is_god
 from .state import GameState, Player
+
+#: 出局时能开枪的角色 → (行动类型, 公开称呼)
+GUN_ROLES: dict[Role, tuple[str, str]] = {
+    Role.HUNTER: ("hunter_shot", "猎人"),
+    Role.WOLF_KING: ("wolf_king_shot", "狼王"),
+}
 
 
 @dataclass
@@ -56,8 +62,15 @@ class Engine:
             for i, seat in enumerate(sorted(model_by_seat))
         }
         self.state = GameState(game_id=game_id, board=board, players=players)
+        self.state.mask_immunity = {
+            s: self.rules.mask_exile_immunity
+            for s, p in players.items()
+            if p.role is Role.MASK
+        }
         self.state.log.subscribe(archive.on_event)
         self.agents = {seat: agent_factory(seat, p.model_key) for seat, p in players.items()}
+        #: 今晚被舞者封住技能的座位（每晚重置）
+        self.danced: int | None = None
 
     # ================================================================
     # 工具
@@ -130,6 +143,23 @@ class Engine:
             meta=meta,
         )
 
+    def _blocked(self, seat: int) -> bool:
+        """今晚这个座位的技能是否被舞者封住了。
+
+        通知在舞者阶段就发给本人了（平民也会收到），这里只做判定。
+        """
+        return self.danced is not None and seat == self.danced
+
+    def _has_night_skill(self, seat: int) -> bool:
+        """这个座位今晚原本有没有可以发动的夜间技能（舞者的反馈依据）。"""
+        st = self.state
+        role = st.players[seat].role
+        if role is Role.WITCH:
+            return st.witch_antidote or st.witch_poison
+        if role is Role.PSYCHIC:
+            return bool(st.dead_seats())
+        return role in NIGHT_SKILL_ROLES
+
     def _gather(self, tasks: list[tuple[Any, Callable[[], Any]]]) -> dict:
         """并发执行互不影响的决策（同一时刻的投票、夜间独立技能）。"""
         if self.parallel == 1 or len(tasks) <= 1:
@@ -167,7 +197,7 @@ class Engine:
             visibility=Visibility.PUBLIC,
         )
         for seat, p in st.players.items():
-            mates = [w for w in wolves if w != seat] if p.role is Role.WEREWOLF else []
+            mates = [w for w in wolves if w != seat] if p.camp is Camp.WOLF else []
             self.agents[seat].on_game_start(
                 seat=seat,
                 role=p.role,
@@ -203,18 +233,76 @@ class Engine:
         self._emit(type="night_start", text=f"天黑请闭眼（第 {st.day} 夜）。", visibility=Visibility.PUBLIC)
         self.on_progress(f"第{st.day}夜")
 
+        # 舞者最先行动：它决定今晚谁的技能作废。
+        self.danced = self._dancer_phase()
         guard_target = self._guard_phase()
+        self._mechanic_phase()  # 机械狼先扫描，结果会影响狼队今晚的刀口
         kill_target = self._wolf_phase()
         antidote_used, poison_target = self._witch_phase(kill_target)
         self._seer_phase()
+        self._psychic_phase()
 
         deaths = self._resolve_night(guard_target, kill_target, antidote_used, poison_target)
         self._night_deaths = deaths
+
+    def _dancer_phase(self) -> int | None:
+        st = self.state
+        seat = st.role_seat(Role.DANCER)
+        if seat is None:
+            return None
+        options = [s for s in st.alive_seats() if s != seat]
+        if not self.rules.dancer_repeat and st.last_dance_target in options:
+            options = [s for s in options if s != st.last_dance_target]
+        extra = ""
+        if st.last_dance_target:
+            extra = f"你昨晚邀请的是 {st.last_dance_target} 号，今晚不能再邀请他。"
+        d = self._ask(seat, "dancer_dance", options=options, extra=extra, allow_zero=True)
+        target = d.data.get("target", 0) or 0
+        if target not in options:
+            target = 0
+
+        if target and self.rules.dancer_feedback:
+            hint = (
+                f"你邀请 {target} 号共舞，封住了他今晚的技能。"
+                + (
+                    "你感觉到他今晚原本【有】夜间技能。"
+                    if self._has_night_skill(target)
+                    else "你感觉到他今晚原本【没有】夜间技能（可能是平民、猎人这类白天才起作用的身份）。"
+                )
+            )
+        elif target:
+            hint = f"你邀请 {target} 号共舞，封住了他今晚的技能。"
+        else:
+            hint = "你今晚没有邀请任何人。"
+
+        ev = self._emit(
+            type="dancer_dance",
+            text=hint,
+            visibility=Visibility.PRIVATE,
+            actor=seat,
+            targets=[target] if target else [],
+            audience={seat},
+            data={"target": target},
+        )
+        self._log_mind(seat, "dancer_dance", d, ev.idx)
+        if target:
+            self._emit(
+                type="skill_blocked",
+                text="今晚有人邀请你共舞，你当晚的技能全部失效。",
+                visibility=Visibility.PRIVATE,
+                actor=target,
+                audience={target},
+            )
+        st.last_dance_target = target or None
+        return target or None
 
     def _guard_phase(self) -> int | None:
         st = self.state
         seat = st.role_seat(Role.GUARD)
         if seat is None:
+            return None
+        if self._blocked(seat):
+            st.last_guard_target = None
             return None
         options = [s for s in st.alive_seats()]
         if not self.rules.guard_repeat and st.last_guard_target in options:
@@ -236,15 +324,69 @@ class Engine:
         st.last_guard_target = target or None
         return target or None
 
+    def _mechanic_phase(self) -> None:
+        st = self.state
+        seat = st.role_seat(Role.MECHANIC_WOLF)
+        if seat is None:
+            return
+        wolf_set = frozenset(st.wolf_seats(alive_only=True))
+        if self._blocked(seat):
+            self._emit(
+                type="mechanic_blocked",
+                text=f"{seat}号（机械狼）今晚被封住了技能，无法扫描，也无法参与刀人。",
+                visibility=Visibility.WOLF,
+                audience=wolf_set,
+            )
+            return
+        options = [s for s in st.alive_seats() if s not in wolf_set]
+        if not options:
+            return
+        d = self._ask(seat, "mechanic_scan", options=options)
+        target = d.data.get("target", 0) or 0
+        if target not in options:
+            target = options[0]
+        verdict = "神职" if is_god(st.players[target].role) else "非神职"
+        shares = self.rules.mechanic_wolf_shares
+        talk = d.data.get("wolf_talk", "")
+        ev = self._emit(
+            type="mechanic_scan",
+            text=(f"{seat}号（机械狼）说：{talk}　" if talk and shares else "")
+            + f"机械狼扫描了 {target} 号，结果是【{verdict}】。",
+            visibility=Visibility.WOLF if shares else Visibility.PRIVATE,
+            actor=seat,
+            targets=[target],
+            audience=wolf_set if shares else {seat},
+            data={"target": target, "verdict": verdict},
+        )
+        self._log_mind(seat, "mechanic_scan", d, ev.idx)
+
     def _wolf_phase(self) -> int | None:
         st = self.state
         wolves = st.wolf_seats(alive_only=True)
         if not wolves:
             return None
         wolf_set = frozenset(wolves)
+        actors = [s for s in wolves if s != self.danced]
+        if not actors:
+            self._emit(
+                type="wolf_decision",
+                text="狼队今晚全员被封，无法刀人。",
+                visibility=Visibility.WOLF,
+                audience=wolf_set,
+                data={"votes": {}},
+            )
+            return None
+        if len(actors) < len(wolves):
+            blocked_seat = self.danced
+            self._emit(
+                type="wolf_blocked",
+                text=f"{blocked_seat}号今晚被封住了技能，无法参与刀人。",
+                visibility=Visibility.WOLF,
+                audience=wolf_set,
+            )
         options = [s for s in st.alive_seats() if s not in wolf_set] or st.alive_seats()
         votes: dict[int, int] = {}
-        for seat in wolves:  # 顺序进行，后手能看到先手在狼队频道的发言
+        for seat in actors:  # 顺序进行，后手能看到先手在狼队频道的发言
             d = self._ask(seat, "wolf_kill", options=options)
             target = d.data.get("target", 0) or 0
             talk = d.data.get("wolf_talk", "")
@@ -266,8 +408,8 @@ class Engine:
         if tally:
             top = max(tally.values())
             finalists = sorted(t for t, c in tally.items() if c == top)
-            # 平局由座位最小的存活狼人拍板
-            decider = votes.get(min(wolves))
+            # 平局由座位最小的、今晚能行动的狼人拍板
+            decider = votes.get(min(actors))
             target = decider if decider in finalists else finalists[0]
         else:
             target = None
@@ -285,6 +427,8 @@ class Engine:
         st = self.state
         seat = st.role_seat(Role.WITCH)
         if seat is None or (not st.witch_antidote and not st.witch_poison):
+            return False, None
+        if self._blocked(seat):
             return False, None
 
         sees = self.rules.witch_sees_kill == "always" or st.day == 1
@@ -344,7 +488,7 @@ class Engine:
     def _seer_phase(self) -> None:
         st = self.state
         seat = st.role_seat(Role.SEER)
-        if seat is None:
+        if seat is None or self._blocked(seat):
             return
         options = [s for s in st.alive_seats() if s != seat]
         d = self._ask(seat, "seer_check", options=options)
@@ -364,6 +508,40 @@ class Engine:
             data={"target": target, "verdict": verdict},
         )
         self._log_mind(seat, "seer_check", d, ev.idx)
+
+    def _psychic_phase(self) -> None:
+        st = self.state
+        seat = st.role_seat(Role.PSYCHIC)
+        if seat is None:
+            return
+        options = st.dead_seats()
+        if not options:
+            self._emit(
+                type="psychic_idle",
+                text="场上还没有出局的玩家，你今晚无法通灵。",
+                visibility=Visibility.PRIVATE,
+                actor=seat,
+                audience={seat},
+            )
+            return
+        if self._blocked(seat):
+            return
+        d = self._ask(seat, "psychic_check", options=options)
+        target = d.data.get("target", 0) or 0
+        if target not in options:
+            target = options[-1]  # 保底通灵最近出局的一位
+        p = st.players[target]
+        verdict = p.role.value if self.rules.psychic_reveals_role else p.camp.value
+        ev = self._emit(
+            type="psychic_check",
+            text=f"你通灵了 {target} 号（第{p.death_day}天出局），他的身份是【{verdict}】。",
+            visibility=Visibility.PRIVATE,
+            actor=seat,
+            targets=[target],
+            audience={seat},
+            data={"target": target, "verdict": verdict},
+        )
+        self._log_mind(seat, "psychic_check", d, ev.idx)
 
     def _resolve_night(
         self,
@@ -419,8 +597,7 @@ class Engine:
             for seat, _cause in sorted(deaths):
                 self._last_words(seat)
         for seat, cause in sorted(deaths):
-            if st.players[seat].role is Role.HUNTER and cause != "毒杀":
-                self._hunter_shot(seat)
+            self._on_death(seat, cause)
 
         if self._check_end():
             return
@@ -472,6 +649,8 @@ class Engine:
             )
             exiled = self._one_vote(round_no=2)
         if isinstance(exiled, int):
+            if self._mask_survives_exile(exiled):
+                return
             st.kill(exiled, "放逐")
             self._emit(
                 type="exile",
@@ -480,14 +659,21 @@ class Engine:
                 targets=[exiled],
             )
             self._last_words(exiled)
-            if st.players[exiled].role is Role.HUNTER:
-                self._hunter_shot(exiled)
+            self._on_death(exiled, "放逐")
         else:
             self._emit(type="no_exile", text="本轮无人被放逐。", visibility=Visibility.PUBLIC)
 
     def _one_vote(self, round_no: int) -> int | str:
         st = self.state
-        voters = st.alive_seats()
+        voters = st.voter_seats()
+        candidates = st.alive_seats()
+        if not voters:
+            self._emit(
+                type="vote_result",
+                text="场上没有人还拥有投票权，本轮无人出局。",
+                visibility=Visibility.PUBLIC,
+            )
+            return "none"
         snapshots = {s: self._observation(s) for s in voters}
         tasks = [
             (
@@ -496,7 +682,7 @@ class Engine:
                     lambda s=s: self._ask(
                         s,
                         "vote",
-                        options=[x for x in voters if x != s],
+                        options=[x for x in candidates if x != s],
                         allow_zero=True,
                         observation=snapshots[s],
                         extra=("这是第二轮投票（上一轮平票）。" if round_no == 2 else ""),
@@ -512,7 +698,7 @@ class Engine:
         for seat in voters:
             d = decisions[seat]
             target = d.data.get("target", 0) or 0
-            if target == seat or target not in voters:
+            if target == seat or target not in candidates:
                 target = 0
             detail[seat] = target
             if target:
@@ -527,7 +713,7 @@ class Engine:
                 data={"target": target, "round": round_no},
             )
             self._log_mind(seat, "vote", d, ev.idx)
-            for other in voters:
+            for other in candidates:
                 fn = getattr(self.agents[other], "observe_vote", None)
                 if fn:
                     fn(seat, target)
@@ -561,27 +747,60 @@ class Engine:
         )
         self._log_mind(seat, "last_words", d, ev.idx)
 
-    def _hunter_shot(self, seat: int) -> None:
+    def _on_death(self, seat: int, cause: str) -> None:
+        """结算出局者的死亡技能（猎人 / 狼王开枪）。"""
+        role = self.state.players[seat].role
+        if role not in GUN_ROLES:
+            return
+        if cause == "毒杀" and not (
+            role is Role.WOLF_KING and self.rules.wolf_king_shoot_on_poison
+        ):
+            return  # 被毒死的枪口是哑的
+        self._gun_shot(seat, *GUN_ROLES[role])
+
+    def _gun_shot(self, seat: int, kind: str, label: str) -> None:
         st = self.state
         options = st.alive_seats()
         if not options:
             return
-        d = self._ask(seat, "hunter_shot", options=options, allow_zero=True)
+        d = self._ask(seat, kind, options=options, allow_zero=True)
         target = d.data.get("target", 0) or 0
         if target not in options:
             target = 0
         ev = self._emit(
-            type="hunter_shot",
+            type=kind,
             text=(d.data.get("speech") or "")
-            + (f"【猎人开枪带走 {target} 号】" if target else "【猎人放弃开枪】"),
+            + (f"【{label}开枪带走 {target} 号】" if target else f"【{label}放弃开枪】"),
             visibility=Visibility.PUBLIC,
             actor=seat,
             targets=[target] if target else [],
         )
-        self._log_mind(seat, "hunter_shot", d, ev.idx)
+        self._log_mind(seat, kind, d, ev.idx)
         if target:
             st.kill(target, "枪杀")
             self._last_words(target)
+            self._on_death(target, "枪杀")  # 枪响可能连环（猎人打狼王）
+
+    def _mask_survives_exile(self, seat: int) -> bool:
+        """假面被放逐：揭面翻牌，本轮不出局。"""
+        st = self.state
+        if st.players[seat].role is not Role.MASK or st.mask_immunity.get(seat, 0) <= 0:
+            return False
+        st.mask_immunity[seat] -= 1
+        st.revealed_roles[seat] = Role.MASK
+        lost_vote = self.rules.mask_loses_vote
+        if lost_vote:
+            st.no_vote_seats.add(seat)
+        self._emit(
+            type="mask_reveal",
+            text=f"{seat} 号被投票放逐，但他当场揭下假面——他的真实身份是【假面】，本轮不出局。"
+            + ("从现在起他失去投票权。" if lost_vote else ""),
+            visibility=Visibility.PUBLIC,
+            actor=seat,
+            targets=[seat],
+            data={"seat": seat, "role": Role.MASK.value, "immunity_left": st.mask_immunity[seat]},
+        )
+        return True
 
     # ----------------------------------------------------------------
     def _check_end(self) -> bool:
