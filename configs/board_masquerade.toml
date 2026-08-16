@@ -1,0 +1,45 @@
+# 12 人「假面舞会」——京城大师赛原创板子（2023-09-07 首播）。
+#
+#   狼队：小狼×3 + 假面（假面不与狼见面）
+#   好人：预言家、女巫、舞者、白痴 + 平民×4
+#
+# 核心是舞池：舞者第二夜起每晚点 3 个人进池，天亮时池里的少数派阵营出局
+# （2好1狼就死那只狼，2狼1好就死那个好人，三人同阵营则相安无事）。
+# 每人整局只能进一次舞池，所以名额是消耗品。
+# 假面在舞者之后行动，给人戴面具翻转其在舞池里的结算阵营——好人算狼、狼算好人。
+name = "12人假面舞会(舞者+白痴 VS 假面)"
+seats = 12
+
+[roles]
+"狼人" = 3
+"假面" = 1
+"预言家" = 1
+"女巫" = 1
+"舞者" = 1
+"白痴" = 1
+"平民" = 4
+
+[rules]
+victory = "屠边"
+witch_self_save_day = 1
+witch_sees_kill = "always"
+witch_same_night_both = false
+
+dance_from_night = 2            # 舞者从第二夜开始
+dance_size = 3                  # 每晚 3 人进舞池
+dance_once_per_player = true    # 每人整局只能进一次
+dance_pool_immune_to_kill = true # 舞者本人在池中时，池内全员免疫狼刀
+dancer_poison_immune = true
+dancer_learns_pool_result = false # 桌面规则：法官不告诉舞者结算细节，改 true 可开"教学模式"
+
+mask_from_night = 2
+mask_repeat = false             # 不能连续两晚给同一人戴面具
+mask_poison_immune = true
+
+idiot_exile_immunity = 1
+idiot_loses_vote = true
+
+first_night_last_words = true
+night_death_last_words = false
+tie_rule = "revote"
+max_days = 8

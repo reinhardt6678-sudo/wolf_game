@@ -1,18 +1,22 @@
-# 12 人机械狼通灵师局（信息战板子）。
+# 12 人「机械狼通灵师」——京城大师赛板子。
 #
-# 双方各有一台"扫描仪"：
-#   机械狼 —— 每晚查一个活人「是不是神职」，结果同步整个狼队（精准屠神）；
-#   通灵师 —— 每晚查一个死人的真实身份（后期把死人堆变成好人的证据链）。
-name = "12人机械狼通灵师局(信息战)"
+#   狼队：小狼×3 + 机械狼（机械狼与小狼互不认识，小狼经常把它当好人刀掉）
+#   好人：通灵师、女巫、猎人、守卫 + 平民×4      ← 注意：没有预言家
+#
+# 通灵师每晚查一个人的【具体身份】，不是好人/狼人。
+# 机械狼首夜单独睁眼学一张牌（整局只有一次），得知对方真实身份并习得技能，次夜生效；
+# 通灵师查它：没学过显示「狼人」，学过之后显示它学来的那张牌——所以场上可能出现两个守卫。
+# 小狼全部出局之后，刀才交到机械狼手上。
+name = "12人机械狼通灵师局"
 seats = 12
 
 [roles]
 "狼人" = 3
 "机械狼" = 1
-"预言家" = 1
-"女巫" = 1
-"守卫" = 1
 "通灵师" = 1
+"女巫" = 1
+"猎人" = 1
+"守卫" = 1
 "平民" = 4
 
 [rules]
@@ -22,8 +26,12 @@ witch_sees_kill = "always"
 witch_same_night_both = false
 guard_repeat = false
 guard_save_conflict_dies = true
-mechanic_wolf_shares = true    # 扫描结果同步给整个狼队；false = 只有机械狼自己知道
-psychic_reveals_role = true    # 通灵看到具体身份；false = 只看好人/狼人
+
+mechanic_learn_night = 1        # 首夜学习
+mechanic_skill_delay = 1        # 次夜生效
+mechanic_double_kill = true     # 学到狼人 → 一次双刀
+psychic_sees_exact_role = true  # 通灵师看具体身份；false 则退化成预言家
+
 first_night_last_words = true
 night_death_last_words = false
 tie_rule = "revote"

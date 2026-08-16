@@ -172,34 +172,70 @@ def schema_for(kind: str, is_wolf: bool, board: Board | None = None) -> dict:
             },
             ["use_antidote", "poison_target"],
         )
-    if kind == "dancer_dance":
+    if kind == "dance_invite":
         return wrap(
-            "DancerDance",
+            "DanceInvite",
             {
-                "target": {
-                    "type": "integer",
-                    "description": "今晚邀请共舞（封住其技能）的座位号；不邀请填 0",
+                "targets": {
+                    "type": "array",
+                    "items": {"type": "integer"},
+                    "description": (
+                        "今晚进舞池的座位号，必须正好填满规定人数、互不重复，"
+                        "可以包含你自己。天亮时舞池里的少数派阵营会全部出局。"
+                    ),
                 }
             },
-            ["target"],
+            ["targets"],
+        )
+    if kind == "mask_action":
+        return wrap(
+            "MaskAction",
+            {
+                "probe_target": {
+                    "type": "integer",
+                    "description": "想向法官打听「今晚是否在舞池里」的座位号；不打听填 0",
+                },
+                "target": {
+                    "type": "integer",
+                    "description": "给谁戴面具（可以是你自己）——他若在舞池里，结算阵营翻转；不戴填 0",
+                },
+            },
+            ["probe_target", "target"],
         )
     if kind == "psychic_check":
         return wrap(
             "PsychicCheck",
-            {"target": {"type": "integer", "description": "今晚通灵的【已出局】玩家座位号"}},
+            {"target": {"type": "integer", "description": "今晚要查验具体身份的座位号"}},
             ["target"],
         )
-    if kind == "mechanic_scan":
+    if kind == "mechanic_learn":
         return wrap(
-            "MechanicScan",
+            "MechanicLearn",
             {
-                "target": {"type": "integer", "description": "今晚扫描（查是否为神职）的座位号"},
-                "wolf_talk": {
-                    "type": "string",
-                    "description": "把扫描意图告诉狼队友的一句话（只有狼队友看得到）。",
-                },
+                "target": {
+                    "type": "integer",
+                    "description": "要学习的座位号（整局只能学一次，会得知其真实身份并习得技能）",
+                }
             },
-            ["target", "wolf_talk"],
+            ["target"],
+        )
+    if kind == "mechanic_guard":
+        return wrap(
+            "MechanicGuard",
+            {"target": {"type": "integer", "description": "（学到守卫）今晚守护的座位号；不守填 0"}},
+            ["target"],
+        )
+    if kind == "mechanic_psychic":
+        return wrap(
+            "MechanicPsychic",
+            {"target": {"type": "integer", "description": "（学到通灵师）今晚查验的座位号"}},
+            ["target"],
+        )
+    if kind == "mechanic_double_kill":
+        return wrap(
+            "MechanicDoubleKill",
+            {"target": {"type": "integer", "description": "（学到狼人）双刀的第二刀砍谁；不用双刀填 0"}},
+            ["target"],
         )
     if kind == "speech":
         return wrap(

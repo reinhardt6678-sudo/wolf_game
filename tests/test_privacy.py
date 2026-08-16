@@ -30,7 +30,7 @@ class LeakyAgent(HeuristicAgent):
         return d
 
 
-@pytest.fixture(params=["board_9", "board_12", "board_mechanic", "board_dancer", "board_mixed"])
+@pytest.fixture(params=["board_9", "board_12", "board_wolfking", "board_mechanic", "board_masquerade"])
 def leaky_game(engine_factory, request):
     """每副板子都跑一遍：新角色的私密事件同样不能泄漏。"""
     engine = engine_factory(board_key=request.param, seed=17, agent_cls=LeakyAgent)
@@ -84,9 +84,14 @@ PRIVATE_TYPES = (
     "guard_protect",
     "role_assign",
     "psychic_check",
-    "psychic_idle",
-    "dancer_dance",
-    "skill_blocked",
+    "dance_invite",
+    "dance_skipped",
+    "dance_feedback",
+    "mask_action",
+    "mechanic_learn",
+    "mechanic_guard",
+    "mechanic_psychic",
+    "mechanic_double_kill",
 )
 
 
@@ -125,12 +130,20 @@ def test_roles_are_not_leaked_before_game_over(leaky_game):
 
 
 def test_wolves_know_teammates_and_others_do_not(leaky_game):
+    """只有「见面的狼」拿得到队友名单；机械狼/假面和好人一样什么都看不到。"""
     st = leaky_game.state
-    wolves = set(st.wolf_seats())
+    pack = set(st.pack_wolf_seats(alive_only=False))
     for seat in st.seats():
         text = render_events(st.log.visible(seat), seat)
-        mates = wolves - {seat}
-        if seat in wolves and mates:
+        if seat in pack and pack - {seat}:
             assert "狼队友" in text
         else:
-            assert "狼队友" not in text
+            assert "狼队友" not in text, f"{seat}号不该拿到狼队友名单"
+
+
+def test_lone_wolves_are_told_they_are_alone(leaky_game):
+    """机械狼/假面必须知道自己是不见面的那一只，否则它会以为狼队没人说话。"""
+    st = leaky_game.state
+    for seat in st.lone_wolf_seats(alive_only=False):
+        text = render_events(st.log.visible(seat), seat)
+        assert "你不与狼队见面" in text

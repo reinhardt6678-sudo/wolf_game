@@ -19,8 +19,8 @@ from .archive import iter_games
 
 #: 「狼人」既是身份名也是阵营名，按阵营判定；狼王/机械狼按具体身份判定。
 WOLF_GUESSES = {"狼人"}
-WOLF_ROLE_GUESSES = {"狼王", "机械狼"}
-GOOD_GUESSES = {"好人", "平民", "预言家", "女巫", "猎人", "守卫", "通灵师", "舞者", "假面"}
+WOLF_ROLE_GUESSES = {"狼王", "机械狼", "假面"}
+GOOD_GUESSES = {"好人", "平民", "预言家", "女巫", "猎人", "守卫", "通灵师", "舞者", "白痴"}
 
 
 @dataclass

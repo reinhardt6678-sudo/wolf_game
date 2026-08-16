@@ -69,29 +69,39 @@ class HeuristicAgent:
                 "kill_check_target": 0,
                 "reason": "基线策略不做悍跳，保持低调等待好人自爆矛盾。",
             }
-        elif req.kind in ("seer_check", "guard_protect", "dancer_dance", "psychic_check"):
-            if req.kind == "guard_protect":
+        elif req.kind in (
+            "seer_check",
+            "guard_protect",
+            "psychic_check",
+            "mechanic_guard",
+            "mechanic_psychic",
+            "mechanic_learn",
+            "mechanic_double_kill",
+        ):
+            if req.kind in ("guard_protect", "mechanic_guard"):
                 target = self.seat if self.seat in opts else (opts[0] if opts else 0)
                 thinking = f"基线策略：守护 {target} 号（优先自守，保证信息源存活）。"
-            elif req.kind == "psychic_check":
-                target = opts[-1] if opts else 0  # 通灵最近出局的一位
-                thinking = f"基线策略：通灵最近出局的 {target} 号，先补齐死人身份。"
-            elif req.kind == "dancer_dance":
-                target = self._most_suspicious(opts)
-                thinking = f"基线策略：邀请怀疑度最高的 {target} 号共舞，封住他今晚可能的技能。"
+            elif req.kind == "mechanic_learn":
+                target = opts[0] if opts else 0
+                thinking = f"基线策略：学习 {target} 号，赌他是个有技能的神。"
             else:
                 target = self._most_suspicious(opts)
-                thinking = f"基线策略：查验怀疑度最高的 {target} 号。"
+                thinking = f"基线策略：查验/针对怀疑度最高的 {target} 号。"
             data = {"target": target}
-        elif req.kind == "mechanic_scan":
-            target = self._most_suspicious(opts)
-            data = {"target": target, "wolf_talk": f"我今晚扫 {target} 号，看看他是不是神。"}
-            thinking = f"基线策略：扫描 {target} 号，优先找出神职位置方便屠神。"
+        elif req.kind == "dance_invite":
+            pool = sorted(opts)[:3]
+            data = {"targets": pool}
+            thinking = "基线策略：按座位序点满舞池，先把信息面铺开。"
+        elif req.kind == "mask_action":
+            probe = self._most_suspicious(opts) if opts else 0
+            target = self.seat if self.seat in opts else (opts[0] if opts else 0)
+            data = {"probe_target": probe, "target": target}
+            thinking = f"基线策略：打听 {probe} 号在不在舞池，把面具戴在 {target} 号身上翻转结算。"
             scheme = {
                 "stance": "深水(装平民)",
                 "gold_water_target": 0,
                 "kill_check_target": 0,
-                "reason": "机械狼靠扫描积累信息，白天不需要冒头。",
+                "reason": "假面不与狼见面，白天保持低调，靠面具搅乱舞池结算。",
             }
         elif req.kind == "witch_action":
             use = req.day == 1 and "被刀" in req.extra

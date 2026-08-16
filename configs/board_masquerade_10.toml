@@ -1,0 +1,27 @@
+# 10 人假面舞会：比 12 人局少一只小狼和白痴，屠边线更短、节奏更快。
+name = "10人假面舞会(无白痴)"
+seats = 10
+
+[roles]
+"狼人" = 2
+"假面" = 1
+"预言家" = 1
+"女巫" = 1
+"舞者" = 1
+"平民" = 4
+
+[rules]
+victory = "屠边"
+witch_self_save_day = 1
+dance_from_night = 2
+dance_size = 3
+dance_once_per_player = true
+dance_pool_immune_to_kill = true
+dancer_poison_immune = true
+dancer_learns_pool_result = false
+mask_from_night = 2
+mask_repeat = false
+mask_poison_immune = true
+first_night_last_words = true
+tie_rule = "revote"
+max_days = 8

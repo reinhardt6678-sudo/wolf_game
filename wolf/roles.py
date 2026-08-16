@@ -19,33 +19,23 @@ class Role(str, Enum):
     GUARD = "守卫"
     PSYCHIC = "通灵师"
     DANCER = "舞者"
-    MASK = "假面"
+    IDIOT = "白痴"
     WEREWOLF = "狼人"
     WOLF_KING = "狼王"
     MECHANIC_WOLF = "机械狼"
+    MASK = "假面"
 
 
 GOD_ROLES = frozenset(
-    {Role.SEER, Role.WITCH, Role.HUNTER, Role.GUARD, Role.PSYCHIC, Role.DANCER, Role.MASK}
+    {Role.SEER, Role.WITCH, Role.HUNTER, Role.GUARD, Role.PSYCHIC, Role.DANCER, Role.IDIOT}
 )
-WOLF_ROLES = frozenset({Role.WEREWOLF, Role.WOLF_KING, Role.MECHANIC_WOLF})
+WOLF_ROLES = frozenset({Role.WEREWOLF, Role.WOLF_KING, Role.MECHANIC_WOLF, Role.MASK})
 
-#: 拥有夜间技能的角色（舞者的"封技能"反馈按这个判定）。
-#: 女巫（药已用完）与通灵师（场上还没有死人）在运行时另有判定，见 Engine。
-NIGHT_SKILL_ROLES = frozenset(
-    {
-        Role.SEER,
-        Role.WITCH,
-        Role.GUARD,
-        Role.PSYCHIC,
-        Role.DANCER,
-        Role.WEREWOLF,
-        Role.WOLF_KING,
-        Role.MECHANIC_WOLF,
-    }
-)
+#: 「不见面」的功能狼：不认识狼队友、不进狼队频道、不能自爆，
+#: 有普通狼存活时也不参与刀人；狼队友全部出局后才拿到刀。
+LONE_WOLF_ROLES = frozenset({Role.MECHANIC_WOLF, Role.MASK})
 
-#: 出局时可以开枪的角色 → 死因为该值时**不能**开枪。
+#: 出局时可以开枪的角色（被毒死时哑火，见 Rules）。
 GUN_ROLES = frozenset({Role.HUNTER, Role.WOLF_KING})
 
 #: 玩家在发言中可以宣称的身份（含"隐藏"）。板子会把它收窄到本局存在的角色，
@@ -65,6 +55,11 @@ def is_villager(role: Role) -> bool:
     return role is Role.VILLAGER
 
 
+def is_pack_wolf(role: Role) -> bool:
+    """是否是「见面的狼」——参与狼队频道与狼刀的那一批。"""
+    return role in WOLF_ROLES and role not in LONE_WOLF_ROLES
+
+
 ROLE_BRIEF = {
     Role.VILLAGER: "你没有任何技能，只有一张嘴和一票。你的价值在于分析发言、找出狼人、把票投对。",
     Role.SEER: "每晚可以查验一名玩家，得知其为「好人」或「狼人」。你是好人阵营的核心信息源。",
@@ -72,20 +67,23 @@ ROLE_BRIEF = {
     Role.HUNTER: "当你被狼人刀杀或被投票放逐出局时，可以开枪带走一名玩家；被女巫毒死则无法开枪。",
     Role.GUARD: "每晚可以守护一名玩家（含自己），使其免于狼人刀杀。不能连续两晚守护同一人。",
     Role.PSYCHIC: (
-        "每晚可以通灵一名**已出局**的玩家，得知他的真实身份。首夜场上还没有死人，"
-        "你无事可做；从第二夜开始，你是好人阵营最硬的后期信息源——"
-        "被狼刀的一定不是狼，被放逐的却未必是狼。"
+        "你是通灵师（本局没有预言家，你就是好人的查验位）：每晚可以查验一名玩家的"
+        "**具体身份**——不是「好人/狼人」，而是「预言家」「女巫」「平民」这样的精确牌面。"
+        "注意机械狼：它没学习过时你会查到「狼人」，学习之后你查到的是**它学来的那张牌**，"
+        "所以你可能会查出两个「守卫」。"
     ),
     Role.DANCER: (
-        "每晚可以邀请一名玩家共舞，被邀请者当晚**所有技能失效**"
-        "（狼人无法参与刀人、神职技能作废），并且他会知道自己被封了。"
-        "不能连续两晚邀请同一人，也不能邀请自己。"
-        "共舞之后你会得知：对方今晚**原本是否拥有夜间技能**（平民、猎人、假面都是「没有」）。"
+        "你是舞者。第二夜起，你每晚必须点 3 名玩家进入**舞池**（可以点自己）。"
+        "天亮时结算舞池：3 人若同属一个阵营，则相安无事；"
+        "若阵营不同，**少数派全部出局**（2 好 1 狼 → 那只狼出局；2 狼 1 好 → 那个好人出局）。"
+        "每名玩家整局**只能进一次舞池**，进过就不能再点。"
+        "你自己进池的那一晚，池中三人当晚免疫狼刀；你本人免疫女巫毒。"
+        "法官不会告诉你结算细节——谁死了是公开的，池子里发生过什么要你自己推。"
     ),
-    Role.MASK: (
-        "你戴着一张假面。第一次被投票放逐时你不会出局，而是当场揭下假面、"
-        "向全场公开你的真实身份，然后继续留在场上——但从此失去投票权。"
-        "夜里被狼刀或被毒依然会正常死亡。你是好人阵营的「抗推位」：被冤枉一次不亏。"
+    Role.IDIOT: (
+        "你是白痴。第一次被投票放逐时你不会出局，而是当场翻牌亮出白痴身份继续留在场上，"
+        "但从此**失去投票权**。夜里被狼刀或被女巫毒依然会正常死亡。"
+        "你是好人的抗推位：被冤枉一次不亏，翻牌之后你的话反而最可信。"
     ),
     Role.WEREWOLF: "每晚与狼队友商议后共同刀杀一名玩家。白天你需要伪装成好人，混淆视听、带偏节奏。",
     Role.WOLF_KING: (
@@ -94,9 +92,23 @@ ROLE_BRIEF = {
         "白天你既要伪装成好人，也要让好人不敢轻易推你。"
     ),
     Role.MECHANIC_WOLF: (
-        "你是机械狼：每晚和狼队友一起刀人，此外还可以扫描一名玩家，"
-        "得知他【是神职】还是【不是神职】（但不知道具体是哪个神），"
-        "扫描结果会同步给整个狼队。你是狼队的查神机器——用它来精准屠神。"
+        "你是机械狼，狼队阵营，但**你和小狼互不认识**：你看不到狼队频道，小狼也不知道你是谁，"
+        "他们完全可能把你当好人刀掉。你不能自爆。\n"
+        "首夜你单独睁眼，选择一名存活玩家**学习**——你会知道他的真实身份，并习得他的技能"
+        "（整局只能学一次，技能从下一夜开始生效）。学到守卫就能守人（免刀免毒），"
+        "学到猎人就能在出局时开枪，学到通灵师就能查具体身份，学到狼人则获得一次双刀。\n"
+        "小狼全部出局之后，刀才会交到你手上。在那之前你不参与刀人。\n"
+        "通灵师查你：没学习过显示「狼人」，学习之后显示你学来的那张牌。"
+    ),
+    Role.MASK: (
+        "你是假面，狼队阵营，但**你不与狼队见面**：你看不到狼队频道，小狼也不认识你，"
+        "你不能自爆。你免疫女巫的毒。\n"
+        "第二夜起，你在舞者之后行动：可以先向法官打听**某一名玩家今晚是否在舞池里**，"
+        "然后给任意一名玩家（可以是你自己）戴上面具，或者空过。"
+        "戴着面具的人如果正好在舞池里，他在舞池结算时的**阵营会翻转**——"
+        "好人算作狼、狼算作好人，从而改变谁是少数派、谁出局。"
+        "不能连续两晚给同一个人戴面具。\n"
+        "狼队友全部出局之后，刀才会交到你手上。"
     ),
 }
 
@@ -157,14 +169,31 @@ class Rules:
     tie_rule: str = "revote"  # revote | none
     max_days: int = 8
 
-    # ---- 扩展角色 ----
+    # ---- 狼王 ----
     wolf_king_shoot_on_poison: bool = False  # 狼王被毒死能否开枪
-    mechanic_wolf_shares: bool = True  # 机械狼的扫描结果是否同步给整个狼队
-    psychic_reveals_role: bool = True  # 通灵师看到具体身份(True) 还是只看好人/狼人(False)
-    dancer_repeat: bool = False  # 舞者能否连续两晚邀请同一人
-    dancer_feedback: bool = True  # 舞者是否得知舞伴「原本有无夜间技能」
-    mask_exile_immunity: int = 1  # 假面能免疫几次放逐
-    mask_loses_vote: bool = True  # 假面揭面后是否失去投票权
+
+    # ---- 假面舞会：舞者 ----
+    dance_from_night: int = 2  # 舞者从第几夜开始共舞
+    dance_size: int = 3  # 每晚进舞池的人数
+    dance_once_per_player: bool = True  # 每名玩家整局只能进一次舞池
+    dance_pool_immune_to_kill: bool = True  # 舞者本人在池中时，池内全员免疫狼刀
+    dancer_poison_immune: bool = True  # 舞者免疫女巫毒
+    dancer_learns_pool_result: bool = False  # 法官是否私下告诉舞者舞池结算（桌面规则：不告诉）
+
+    # ---- 假面舞会：假面 ----
+    mask_from_night: int = 2  # 假面从第几夜开始行动
+    mask_repeat: bool = False  # 能否连续两晚给同一人戴面具
+    mask_poison_immune: bool = True  # 假面免疫女巫毒
+
+    # ---- 白痴 ----
+    idiot_exile_immunity: int = 1  # 白痴能免疫几次放逐
+    idiot_loses_vote: bool = True  # 翻牌后是否失去投票权
+
+    # ---- 机械狼 / 通灵师 ----
+    mechanic_learn_night: int = 1  # 机械狼在第几夜学习
+    mechanic_skill_delay: int = 1  # 学到的技能几夜之后生效
+    mechanic_double_kill: bool = True  # 学到狼人是否获得一次双刀
+    psychic_sees_exact_role: bool = True  # 通灵师看具体身份(True) 还是只看阵营(False)
 
     def describe(self, roles: "list[Role] | set[Role] | None" = None) -> str:
         """规则说明。传入 ``roles`` 时只输出这些角色相关的条目。"""
@@ -200,29 +229,48 @@ class Rules:
                 "- 狼王被放逐或被枪杀出局时可以开枪带走一人；"
                 + ("被女巫毒死也可以开枪" if self.wolf_king_shoot_on_poison else "被女巫毒死则不能开枪")
             )
+        if has(Role.DANCER):
+            lines.append(
+                f"- 舞者第 {self.dance_from_night} 夜起，每晚必须点 {self.dance_size} 人进舞池"
+                + ("（每人整局只能进一次）" if self.dance_once_per_player else "")
+                + "；天亮时舞池内**少数派阵营全部出局**，三人同阵营则无人出局"
+                + ("；舞者本人在池中时池内全员免疫狼刀" if self.dance_pool_immune_to_kill else "")
+                + ("；舞者免疫女巫毒" if self.dancer_poison_immune else "")
+            )
+            if not self.dancer_learns_pool_result:
+                lines.append("- 法官不会告诉舞者舞池的结算过程，只有死讯是公开的")
+        if has(Role.MASK):
+            lines.append(
+                f"- 假面第 {self.mask_from_night} 夜起在舞者之后行动：可以询问一名玩家是否在舞池中，"
+                "并给一名玩家（可含自己）戴面具；戴面具者若在舞池中，其**结算阵营翻转**"
+                + ("；不能连续两晚给同一人戴面具" if not self.mask_repeat else "")
+                + ("；假面免疫女巫毒" if self.mask_poison_immune else "")
+            )
         if has(Role.MECHANIC_WOLF):
             lines.append(
-                "- 机械狼每晚可以扫描一名玩家，得知其【是神职 / 不是神职】"
-                + ("，结果同步给整个狼队" if self.mechanic_wolf_shares else "，结果只有他自己知道")
+                f"- 机械狼第 {self.mechanic_learn_night} 夜单独学习一名存活玩家（整局仅一次），"
+                f"得知其真实身份并习得其技能，{self.mechanic_skill_delay} 夜后生效"
+                + ("；学到狼人可获得一次双刀" if self.mechanic_double_kill else "")
+            )
+        if has(Role.MASK, Role.MECHANIC_WOLF):
+            lone = "、".join(
+                r.value for r in (Role.MECHANIC_WOLF, Role.MASK) if r in present
+            )
+            lines.append(
+                f"- {lone}与普通狼**互不认识**，看不到狼队频道、不能自爆；"
+                "普通狼全部出局后才拿到刀"
             )
         if has(Role.PSYCHIC):
             lines.append(
-                "- 通灵师每晚可以通灵一名已出局的玩家，得知其"
-                + ("真实身份" if self.psychic_reveals_role else "阵营（好人/狼人）")
-                + "；场上没有死人时无法通灵"
+                "- 通灵师每晚查验一名玩家的"
+                + ("具体身份" if self.psychic_sees_exact_role else "阵营（好人/狼人）")
+                + ("；查未学习的机械狼显示「狼人」，查已学习的显示其学来的身份"
+                   if has(Role.MECHANIC_WOLF) else "")
             )
-        if has(Role.DANCER):
+        if has(Role.IDIOT):
             lines.append(
-                "- 舞者每晚邀请一名玩家共舞，该玩家当晚所有技能失效（本人会知道自己被封）；"
-                + ("可以" if self.dancer_repeat else "不可以")
-                + "连续两晚邀请同一人"
-                + ("；舞者会得知舞伴当晚原本有无夜间技能" if self.dancer_feedback else "")
-            )
-        if has(Role.MASK):
-            lines.append(
-                f"- 假面被投票放逐时不会出局（每局 {self.mask_exile_immunity} 次），"
-                "当场翻牌公开身份"
-                + ("，此后失去投票权" if self.mask_loses_vote else "")
+                f"- 白痴被投票放逐时不会出局（每局 {self.idiot_exile_immunity} 次），当场翻牌公开身份"
+                + ("，此后失去投票权" if self.idiot_loses_vote else "")
                 + "；夜间被刀或被毒正常死亡"
             )
         lines += [
@@ -274,46 +322,46 @@ BUILTIN_BOARDS: dict[str, Board] = {
         },
         rules=DEFAULT_RULES,
     ),
+    # 京城大师赛「机械狼通灵师」：通灵师查具体身份，机械狼学一张牌。
     "board_mechanic": Board(
-        name="12人机械狼通灵师局(信息战)",
+        name="12人机械狼通灵师局",
         seats=12,
         role_counts={
             Role.WEREWOLF: 3,
             Role.MECHANIC_WOLF: 1,
-            Role.SEER: 1,
-            Role.WITCH: 1,
-            Role.GUARD: 1,
             Role.PSYCHIC: 1,
+            Role.WITCH: 1,
+            Role.HUNTER: 1,
+            Role.GUARD: 1,
             Role.VILLAGER: 4,
         },
         rules=DEFAULT_RULES,
     ),
-    "board_dancer": Board(
-        name="12人舞者假面局(封技能与抗推)",
+    # 京城大师赛原创「假面舞会」（2023-09-07 首播）。
+    "board_masquerade": Board(
+        name="12人假面舞会(舞者+白痴 VS 假面)",
         seats=12,
         role_counts={
-            Role.WEREWOLF: 4,
+            Role.WEREWOLF: 3,
+            Role.MASK: 1,
             Role.SEER: 1,
             Role.WITCH: 1,
             Role.DANCER: 1,
-            Role.MASK: 1,
+            Role.IDIOT: 1,
             Role.VILLAGER: 4,
         },
         rules=DEFAULT_RULES,
     ),
-    "board_mixed": Board(
-        name="12人群英乱斗局(狼王机械狼 VS 通灵舞者假面)",
-        seats=12,
+    "board_masquerade_10": Board(
+        name="10人假面舞会(无白痴)",
+        seats=10,
         role_counts={
             Role.WEREWOLF: 2,
-            Role.WOLF_KING: 1,
-            Role.MECHANIC_WOLF: 1,
+            Role.MASK: 1,
             Role.SEER: 1,
             Role.WITCH: 1,
-            Role.PSYCHIC: 1,
             Role.DANCER: 1,
-            Role.MASK: 1,
-            Role.VILLAGER: 3,
+            Role.VILLAGER: 4,
         },
         rules=DEFAULT_RULES,
     ),

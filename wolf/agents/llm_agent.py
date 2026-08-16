@@ -17,9 +17,13 @@ SEAT_FIELDS = {
     "seer_check": ["target"],
     "guard_protect": ["target"],
     "witch_action": ["poison_target"],
-    "dancer_dance": ["target"],
+    "dance_invite": [],
+    "mask_action": ["probe_target", "target"],
     "psychic_check": ["target"],
-    "mechanic_scan": ["target"],
+    "mechanic_learn": ["target"],
+    "mechanic_guard": ["target"],
+    "mechanic_psychic": ["target"],
+    "mechanic_double_kill": ["target"],
     "speech": ["vote_intent"],
     "vote": ["target"],
     "hunter_shot": ["target"],
@@ -115,6 +119,9 @@ class LLMAgent:
             if was_coerced:
                 coerced.append(field)
 
+        if req.kind == "dance_invite":
+            raw = payload.get("targets")
+            data["targets"] = [x for x in raw if isinstance(x, int)] if isinstance(raw, list) else []
         for field in ("wolf_talk", "speech", "one_liner", "claim"):
             if field in payload:
                 data[field] = str(payload[field] or "").strip()
@@ -151,6 +158,10 @@ class LLMAgent:
             return {"target": 0, "speech": "（本轮无有效输出）", "one_liner": ""}
         if req.kind in ("speech", "last_words"):
             return {"claim": "隐藏", "speech": "（本轮无有效输出）", "vote_intent": 0}
-        if req.kind == "guard_protect":
+        if req.kind == "dance_invite":
+            return {"targets": []}  # 引擎会自动补齐成合法的舞池
+        if req.kind == "mask_action":
+            return {"probe_target": 0, "target": 0}
+        if req.kind in ("guard_protect", "mechanic_guard"):
             return {"target": self.seat if self.seat in req.options else (fallback or 0)}
         return {"target": fallback or 0, "wolf_talk": ""}
